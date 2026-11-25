@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gauteng SME Events & Showcase Dashboard 2027</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .kpi-label { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.03em; color: #6c757d; font-weight: 600; }
+    .kpi-value { font-size: 1.55rem; font-weight: 700; margin-bottom: 0; }
+    .nav-tabs .nav-link { font-weight: 500; color: #495057; }
+    .nav-tabs .nav-link.active { font-weight: 700; color: #0d6efd; }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { background-color: #e9ecef; }
+    .entity-link { text-decoration: none; color: #0d6efd; }
+    .entity-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body class="bg-light">
+<div class="container-fluid px-4 py-4">
+
+  <!-- Header & Action Buttons -->
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+      <h2 class="mb-0">Gauteng SME Events & Showcase Dashboard | 2027</h2>
+      <small class="text-muted">Incubation Cohort Event Matching, Stakeholder CRM, ZAR Budgets & Impact Tracking</small>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="{% url 'calendar_view' %}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary">Open Calendar Window ↗</a>
+      <a href="{% url 'sme_portal' %}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-success">SME View (Read-Only) ↗</a>
+      <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#analyticsPanel">Toggle Charts</button>
+      <a href="{% url 'export_excel' %}" class="btn btn-success">Download Excel (.xlsx)</a>
+      <a href="/admin/" class="btn btn-primary">Manage Data in Admin</a>
+    </div>
+  </div>
+
+  <!-- Feedback Alerts -->
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <!-- Responsive KPI Cards -->
+  <div class="row row-cols-2 row-cols-sm-3 row-cols-xl-6 g-3 mb-4">
+    <div class="col"><div class="card shadow-sm border-0 p-3 text-center h-100"><div class="kpi-label">External Events</div><p class="kpi-value">{{ external_events_count }}</p></div></div>
+    <div class="col"><div class="card shadow-sm border-0 p-3 text-center h-100"><div class="kpi-label">Internal Showcases</div><p class="kpi-value">{{ internal_showcases_count }}</p></div></div>
+    <div class="col"><div class="card shadow-sm border-0 p-3 text-center h-100"><div class="kpi-label">SMEs Profiled</div><p class="kpi-value">{{ smes_count }}</p></div></div>
+    <div class="col"><div class="card shadow-sm border-0 p-3 text-center h-100"><div class="kpi-label">Stakeholders</div><p class="kpi-value">{{ stakeholders_count }}</p></div></div>
+    <div class="col"><div class="card shadow-sm border-0 p-3 text-center h-100"><div class="kpi-label">Est. Budget (ZAR)</div><p class="kpi-value text-primary">R {{ total_estimated_budget|floatformat:0 }}</p></div></div>
+    <div class="col"><div class="card shadow-sm border-0 p-3 text-center h-100"><div class="kpi-label">Confirmed Sales</div><p class="kpi-value text-success">R {{ confirmed_sales|floatformat:0 }}</p></div></div>
+  </div>
+
+  <!-- Collapsible Visual Analytics Charts -->
+  <div class="collapse mb-4" id="analyticsPanel">
+    <div class="row g-3">
+      <div class="col-lg-5">
+        <div class="card shadow-sm border-0 p-3 h-100">
+          <h6 class="fw-bold mb-2">Stakeholder Ecosystem by Category</h6>
+          <div style="height: 220px;"><canvas id="stakeholderChart"></canvas></div>
+        </div>
+      </div>
+      <div class="col-lg-7">
+        <div class="card shadow-sm border-0 p-3 h-100">
+          <h6 class="fw-bold mb-2">Budget vs. Sales Pipeline per SME (ZAR)</h6>
+          <div style="height: 220px;"><canvas id="smeFinanceChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive Navigation Tabs -->
+  <ul class="nav nav-tabs mb-3" id="programmeTabs" role="tablist">
+    <li class="nav-item"><button class="nav-link {% if active_tab == 'smes' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-smes" type="button">SMEs ({{ smes_count }})</button></li>
+    <li class="nav-item"><button class="nav-link {% if active_tab == 'events' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-events" type="button">2027 Events ({{ external_events_count }})</button></li>
+    <li class="nav-item"><button class="nav-link {% if active_tab == 'internal' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-internal" type="button">Internal Showcases ({{ internal_showcases_count }})</button></li>
+    <li class="nav-item"><button class="nav-link {% if active_tab == 'stakeholders' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-stakeholders" type="button">Stakeholders ({{ stakeholders_count }})</button></li>
+    <li class="nav-item"><button class="nav-link {% if active_tab == 'scorecards' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-scorecards" type="button">SME Scorecards ({{ scorecards|length }})</button></li>
+    <li class="nav-item"><button class="nav-link {% if active_tab == 'budgets' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-budgets" type="button">ZAR Budgets ({{ budgets|length }})</button></li>
+    <li class="nav-item"><button class="nav-link {% if active_tab == 'logs' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-logs" type="button">Participation Log ({{ logs|length }})</button></li>
+    <li class="nav-item"><button class="nav-link {% if active_tab == 'plan' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-plan" type="button">Plan, Milestones & Risks</button></li>
+  </ul>
+
+  <div class="tab-content">
+
+    <!-- TAB 1: Incubated SMEs & Interactive Guest List Modals -->
+    <div class="tab-pane fade {% if active_tab == 'smes' %}show active{% endif %}" id="tab-smes">
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <span class="fw-bold">Incubated SMEs, Event Matches & Targeted Guest Lists</span>
+          <input type="text" class="form-control form-control-sm w-auto" placeholder="Filter SMEs..." onkeyup="simpleFilter(this, 'smesTable')">
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" id="smesTable">
+            <thead class="table-light">
+              <tr><th>SME</th><th>Sector</th><th>Priority Events</th><th>Potential Customers</th><th>Guest List</th></tr>
+            </thead>
+            <tbody>
+              {% for sme in smes %}
+              <tr>
+                <td class="fw-semibold">{{ sme.trading_name }}</td>
+                <td>{{ sme.sector }}</td>
+                <td><small>{{ sme.priority_events_notes }}</small></td>
+                <td><small>{{ sme.potential_customers }}</small></td>
+                <td class="text-nowrap">
+                  <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#smeModal{{ sme.id }}">
+                    View / Add Guests ({{ sme.targeted_stakeholders.count }})
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {% for sme in smes %}
+      <div class="modal fade" id="smeModal{{ sme.id }}" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">{{ sme.trading_name }} — Profile & Targeted Investors/NPOs</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <p class="mb-1"><strong>Sector:</strong> {{ sme.sector }}</p>
+              <p class="mb-1"><strong>Additional Opportunities:</strong> {{ sme.additional_opportunities }}</p>
+              <p class="mb-3"><strong>Target Customers:</strong> {{ sme.potential_customers }}</p>
+
+              <h6 class="fw-bold border-bottom pb-1">Mapped Investors, NPOs & Corporate Guests ({{ sme.targeted_stakeholders.count }})</h6>
+              <div class="table-responsive mb-3">
+                <table class="table table-sm table-bordered">
+                  <thead class="table-light"><tr><th>Organisation</th><th>Category</th><th>Representative</th><th>Contact</th><th>Reason</th></tr></thead>
+                  <tbody>
+                    {% for t in sme.targeted_stakeholders.all %}
+                    <tr>
+                      <td class="fw-semibold">{{ t.organisation_name }}</td>
+                      <td>{{ t.organisation_category }}</td>
+                      <td>{{ t.proposed_representative }}</td>
+                      <td><small>{{ t.email }}<br>{{ t.phone }}</small></td>
+                      <td><small>{{ t.reason_for_invitation }}</small></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-muted text-center">No targeted stakeholders mapped yet.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+
+              <h6 class="fw-bold border-bottom pb-1">Add New Target Investor / NPO</h6>
+              <form method="post" class="row g-2">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_sme_target">
+                <input type="hidden" name="sme_id" value="{{ sme.id }}">
+                <div class="col-md-5"><label class="form-label small mb-1">Organisation Name</label>{{ target_form.organisation_name }}</div>
+                <div class="col-md-3"><label class="form-label small mb-1">Category</label>{{ target_form.organisation_category }}</div>
+                <div class="col-md-4"><label class="form-label small mb-1">Representative</label>{{ target_form.proposed_representative }}</div>
+                <div class="col-md-4"><label class="form-label small mb-1">Email</label>{{ target_form.email }}</div>
+                <div class="col-md-4"><label class="form-label small mb-1">Phone</label>{{ target_form.phone }}</div>
+                <div class="col-md-4"><label class="form-label small mb-1">Reason for Invitation</label>{{ target_form.reason_for_invitation }}</div>
+                <div class="col-12"><button type="submit" class="btn btn-primary btn-sm">Add to Guest List</button></div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- TAB 2: 2027 External Events -->
+    <div class="tab-pane fade {% if active_tab == 'events' %}show active{% endif %}" id="tab-events">
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-white">
+          <div class="row g-2 align-items-center">
+            <div class="col-md-3"><input type="text" id="evSearch" class="form-control form-control-sm" placeholder="Search event, sector, organiser..." onkeyup="filterEvents()"></div>
+            <div class="col-md-2">
+              <select id="evCity" class="form-select form-select-sm" onchange="filterEvents()">
+                <option value="">All Cities / Areas</option>
+                {% for city in event_cities %}<option value="{{ city }}">{{ city }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2">
+              <select id="evPriority" class="form-select form-select-sm" onchange="filterEvents()">
+                <option value="">All Priorities</option>
+                {% for p in event_priorities %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2">
+              <select id="evMonth" class="form-select form-select-sm" onchange="filterEvents()">
+                <option value="">All Months (2027)</option>
+                <option value="-01-">January</option><option value="-02-">February</option><option value="-03-">March</option>
+                <option value="-04-">April</option><option value="-05-">May</option><option value="-06-">June</option>
+                <option value="-07-">July</option><option value="-08-">August</option><option value="-09-">September</option>
+                <option value="-10-">October</option><option value="-11-">November</option><option value="-12-">December</option>
+              </select>
+            </div>
+            <div class="col-md-3 d-flex justify-content-between align-items-center">
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetEventFilters()">Reset</button>
+              <span class="badge bg-dark" id="evCountBadge">Showing {{ external_events|length }} of {{ external_events|length }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" id="eventsTable">
+            <thead class="table-light">
+              <tr>
+                <th class="sortable" onclick="sortTable('eventsTable', 0)">Event & Website ↕</th>
+                <th class="sortable" onclick="sortTable('eventsTable', 1)">Dates ↕</th>
+                <th class="sortable" onclick="sortTable('eventsTable', 2)">Venue / City ↕</th>
+                <th>Relevant Sectors</th>
+                <th class="sortable" onclick="sortTable('eventsTable', 4)">Priority ↕</th>
+                <th>Contact & Deadline</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ev in external_events %}
+              <tr data-city="{{ ev.city_area }}" data-priority="{{ ev.priority }}" data-date="{{ ev.start_date|date:'Y-m-d' }}">
+                <td>
+                  {% if ev.primary_url %}
+                    <a href="{{ ev.primary_url }}" target="_blank" rel="noopener noreferrer" class="fw-semibold entity-link">
+                      {{ ev.name }} ↗
+                    </a>
+                  {% else %}
+                    <span class="fw-semibold">{{ ev.name }}</span>
+                  {% endif %}
+                  <div class="mt-1 d-flex flex-wrap gap-1">
+                    {% for link in ev.website_links %}
+                      <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" class="badge bg-light text-primary border text-decoration-none">
+                        {{ link.label }} ↗
+                      </a>
+                    {% endfor %}
+                  </div>
+                </td>
+                <td class="text-nowrap">{{ ev.start_date|date:"Y-m-d" }}<br><small class="text-muted">to {{ ev.end_date|date:"Y-m-d" }}</small></td>
+                <td>{{ ev.venue }}<br><small class="text-muted">{{ ev.city_area }}</small></td>
+                <td><small>{{ ev.relevant_sectors }}</small></td>
+                <td><span class="badge bg-secondary">{{ ev.priority }}</span></td>
+                <td><small><strong>Deadline:</strong> {{ ev.registration_deadline }}<br><strong>Contact:</strong> {{ ev.contact_email|default:ev.contact_person }}</small></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: Internal Showcases -->
+    <div class="tab-pane fade {% if active_tab == 'internal' %}show active{% endif %}" id="tab-internal">
+      <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <span class="fw-bold">Add Internal Showcase, Hackathon, or Competition</span>
+          <form method="post" class="m-0">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="seed_suggested_showcases">
+            <button type="submit" class="btn btn-outline-primary btn-sm">
+              + Load 6 Suggested Hackathons & Competitions
+            </button>
+          </form>
+        </div>
+        <div class="card-body">
+          <form method="post" class="row g-2">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_internal_showcase">
+            <div class="col-md-2"><label class="form-label small mb-1">Proposed Date</label>{{ internal_form.proposed_date }}</div>
+            <div class="col-md-4"><label class="form-label small mb-1">Title</label>{{ internal_form.title }}</div>
+            <div class="col-md-3"><label class="form-label small mb-1">Format (e.g. Hackathon)</label>{{ internal_form.event_format }}</div>
+            <div class="col-md-3"><label class="form-label small mb-1">Status</label>{{ internal_form.status }}</div>
+            <div class="col-md-4"><label class="form-label small mb-1">SME Focus</label>{{ internal_form.sme_focus }}</div>
+            <div class="col-md-4"><label class="form-label small mb-1">Purpose / Expected Value</label>{{ internal_form.purpose }}</div>
+            <div class="col-md-2"><label class="form-label small mb-1">Lead Owner</label>{{ internal_form.lead_owner }}</div>
+            <div class="col-md-2"><label class="form-label small mb-1">Location / Venue</label>{{ internal_form.location }}</div>
+            <div class="col-12 mt-2"><button type="submit" class="btn btn-primary btn-sm">Add Internal Activity</button></div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <span class="fw-bold">2027 Internal Showcases, Clinics, Hackathons & Competitions ({{ internal_showcases|length }})</span>
+          <input type="text" class="form-control form-control-sm w-auto" placeholder="Filter internal events..." onkeyup="simpleFilter(this, 'internalTable')">
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" id="internalTable">
+            <thead class="table-light"><tr><th>Date</th><th>Activity</th><th>Format</th><th>SME Focus & Purpose</th><th>Lead Owner</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+              {% for item in internal_showcases %}
+              <tr>
+                <td class="text-nowrap">{{ item.proposed_date|date:"Y-m-d"|default:"TBC" }}</td>
+                <td class="fw-semibold">{{ item.title }}<br><small class="text-muted">{{ item.location }}</small></td>
+                <td><span class="badge bg-info text-dark">{{ item.event_format }}</span></td>
+                <td><small><strong>Focus:</strong> {{ item.sme_focus }}<br>{{ item.purpose }}</small></td>
+                <td><small>{{ item.lead_owner }}</small></td>
+                <td>
+                  <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_internal_status">
+                    <input type="hidden" name="record_id" value="{{ item.id }}">
+                    <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                      {% for st in internal_status_choices %}<option value="{{ st }}" {% if item.status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+                    </select>
+                  </form>
+                </td>
+                <td>
+                  <form method="post" onsubmit="return confirm('Delete this internal showcase?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete_record">
+                    <input type="hidden" name="model_type" value="internal">
+                    <input type="hidden" name="record_id" value="{{ item.id }}">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: Stakeholders -->
+    <div class="tab-pane fade {% if active_tab == 'stakeholders' %}show active{% endif %}" id="tab-stakeholders">
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-white">
+          <div class="row g-2 align-items-center">
+            <div class="col-md-3"><input type="text" id="stSearch" class="form-control form-control-sm" placeholder="Search organisation, contact..." onkeyup="filterStakeholders()"></div>
+            <div class="col-md-3">
+              <select id="stCategory" class="form-select form-select-sm" onchange="filterStakeholders()">
+                <option value="">All Categories</option>
+                {% for cat in stakeholder_categories %}<option value="{{ cat }}">{{ cat }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2">
+              <select id="stPriority" class="form-select form-select-sm" onchange="filterStakeholders()">
+                <option value="">All Priorities</option>
+                {% for p in stakeholder_priorities %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2">
+              <select id="stStatus" class="form-select form-select-sm" onchange="filterStakeholders()">
+                <option value="">All Statuses</option>
+                {% for choice in status_choices %}<option value="{{ choice }}">{{ choice }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2 d-flex justify-content-between align-items-center">
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetStakeholderFilters()">Reset</button>
+              <span class="badge bg-dark" id="stCountBadge">{{ stakeholders|length }}/{{ stakeholders|length }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" id="stakeholdersTable">
+            <thead class="table-light"><tr><th>Organisation & Website</th><th>Category</th><th>Contact</th><th>Suggested Ask</th><th>Priority</th><th>Update Status</th></tr></thead>
+            <tbody>
+              {% for st in stakeholders %}
+              <tr data-category="{{ st.category }}" data-priority="{{ st.priority }}" data-status="{{ st.relationship_status }}">
+                <td>
+                  {% if st.primary_url %}
+                    <a href="{{ st.primary_url }}" target="_blank" rel="noopener noreferrer" class="fw-semibold entity-link">
+                      {{ st.organisation }} ↗
+                    </a>
+                  {% else %}
+                    <span class="fw-semibold">{{ st.organisation }}</span>
+                  {% endif %}
+                  <div class="mt-1 d-flex flex-wrap gap-1">
+                    {% for link in st.website_links %}
+                      <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" class="badge bg-light text-primary border text-decoration-none">
+                        {{ link.label }} ↗
+                      </a>
+                    {% endfor %}
+                  </div>
+                </td>
+                <td><small>{{ st.category }}</small></td>
+                <td><small>{{ st.contact_person }}<br>{{ st.email_route }}<br>{{ st.phone }}</small></td>
+                <td><small>{{ st.suggested_ask }}</small></td>
+                <td><span class="badge bg-secondary">{{ st.priority }}</span></td>
+                <td>
+                  <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_stakeholder">
+                    <input type="hidden" name="stakeholder_id" value="{{ st.id }}">
+                    <select name="relationship_status" class="form-select form-select-sm" onchange="this.form.submit()">
+                      {% for choice in status_choices %}
+                        <option value="{{ choice }}" {% if st.relationship_status == choice %}selected{% endif %}>{{ choice }}</option>
+                      {% endfor %}
+                    </select>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: SME Event Scorecards -->
+    <div class="tab-pane fade {% if active_tab == 'scorecards' %}show active{% endif %}" id="tab-scorecards">
+      <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <span class="fw-bold">Score an SME for an Event</span>
+          <span class="badge bg-secondary fs-6" id="liveScorePreview">Live Total: 0 / 100 — Hold / Build Readiness</span>
+        </div>
+        <div class="card-body">
+          <form method="post" class="row g-2" id="scorecardForm">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_scorecard">
+            <div class="col-md-3"><label class="form-label small mb-1">SME</label>{{ scorecard_form.sme }}</div>
+            <div class="col-md-4"><label class="form-label small mb-1">Event</label>{{ scorecard_form.event }}</div>
+            <div class="col-md-2"><label class="form-label small mb-1">Decision</label>{{ scorecard_form.selection_decision }}</div>
+            <div class="col-md-3"><label class="form-label small mb-1">Notes / Gaps</label>{{ scorecard_form.notes_gaps }}</div>
+            <div class="col-4 col-md-2"><label class="form-label small mb-1">Sector Fit (/30)</label>{{ scorecard_form.sector_fit }}</div>
+            <div class="col-4 col-md-2"><label class="form-label small mb-1">Commercial (/20)</label>{{ scorecard_form.commercial_readiness }}</div>
+            <div class="col-4 col-md-2"><label class="form-label small mb-1">Compliance (/15)</label>{{ scorecard_form.compliance }}</div>
+            <div class="col-4 col-md-2"><label class="form-label small mb-1">Delivery (/15)</label>{{ scorecard_form.delivery_capacity }}</div>
+            <div class="col-4 col-md-2"><label class="form-label small mb-1">Pitch/Demo (/10)</label>{{ scorecard_form.pitch_demo }}</div>
+            <div class="col-4 col-md-2"><label class="form-label small mb-1">Alignment (/10)</label>{{ scorecard_form.strategic_alignment }}</div>
+            <div class="col-12 mt-2"><button type="submit" class="btn btn-primary btn-sm">Save Scorecard</button></div>
+          </form>
+        </div>
+      </div>
+      <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0">
+            <thead class="table-light"><tr><th>SME</th><th>Event</th><th>Total /100</th><th>Auto-Recommendation</th><th>Decision</th><th>Notes</th><th>Action</th></tr></thead>
+            <tbody>
+              {% for sc in scorecards %}
+              <tr>
+                <td class="fw-semibold">{{ sc.sme.trading_name }}</td>
+                <td>{{ sc.event.name }}</td>
+                <td class="fw-bold">{{ sc.total_score }} / 100</td>
+                <td><span class="badge {% if sc.total_score >= 75 %}bg-success{% elif sc.total_score >= 60 %}bg-primary{% else %}bg-warning text-dark{% endif %}">{{ sc.recommendation }}</span></td>
+                <td>
+                  <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_scorecard_decision">
+                    <input type="hidden" name="record_id" value="{{ sc.id }}">
+                    <select name="selection_decision" class="form-select form-select-sm" onchange="this.form.submit()">
+                      {% for d in decision_choices %}<option value="{{ d }}" {% if sc.selection_decision == d %}selected{% endif %}>{{ d }}</option>{% endfor %}
+                    </select>
+                  </form>
+                </td>
+                <td><small>{{ sc.notes_gaps }}</small></td>
+                <td>
+                  <form method="post" onsubmit="return confirm('Delete this scorecard?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete_record">
+                    <input type="hidden" name="model_type" value="scorecard">
+                    <input type="hidden" name="record_id" value="{{ sc.id }}">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="7" class="text-center text-muted py-3">No scorecards submitted yet. Use the form above to score an SME.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 6: ZAR Budgets -->
+    <div class="tab-pane fade {% if active_tab == 'budgets' %}show active{% endif %}" id="tab-budgets">
+      <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center">
+          <span class="fw-bold">Add Event Participation Budget (ZAR)</span>
+          <span class="badge bg-primary fs-6" id="liveBudgetPreview">Subtotal: R 0.00 | Contingency: R 0.00 | Est. Total: R 0.00</span>
+        </div>
+        <div class="card-body">
+          <form method="post" class="row g-2" id="budgetForm">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_budget">
+            <div class="col-md-4"><label class="form-label small mb-1">Event</label>{{ budget_form.event }}</div>
+            <div class="col-md-3"><label class="form-label small mb-1">SME (Optional)</label>{{ budget_form.sme }}</div>
+            <div class="col-md-3"><label class="form-label small mb-1">Participation Type</label>{{ budget_form.participation_type }}</div>
+            <div class="col-md-2"><label class="form-label small mb-1">Approval Status</label>{{ budget_form.approval_status }}</div>
+            <div class="col-6 col-md-2"><label class="form-label small mb-1">Stand Fee (R)</label>{{ budget_form.registration_stand_fee }}</div>
+            <div class="col-6 col-md-2"><label class="form-label small mb-1">Transport (R)</label>{{ budget_form.transport }}</div>
+            <div class="col-6 col-md-2"><label class="form-label small mb-1">Accommodation (R)</label>{{ budget_form.accommodation }}</div>
+            <div class="col-6 col-md-2"><label class="form-label small mb-1">Freight/Samples (R)</label>{{ budget_form.freight_samples }}</div>
+            <div class="col-6 col-md-2"><label class="form-label small mb-1">Display/AV (R)</label>{{ budget_form.display_av }}</div>
+            <div class="col-6 col-md-2"><label class="form-label small mb-1">Marketing (R)</label>{{ budget_form.marketing_printing }}</div>
+            <div class="col-6 col-md-2"><label class="form-label small mb-1">Other Cost (R)</label>{{ budget_form.other_cost }}</div>
+            <div class="col-6 col-md-2"><label class="form-label small mb-1">Contingency %</label>{{ budget_form.contingency_pct }}</div>
+            <div class="col-6 col-md-2"><label class="form-label small mb-1">Actual Spend (R)</label>{{ budget_form.actual_spend }}</div>
+            <div class="col-6 col-md-3"><label class="form-label small mb-1">Funding Source</label>{{ budget_form.funding_source }}</div>
+            <div class="col-md-3"><label class="form-label small mb-1">Notes</label>{{ budget_form.notes }}</div>
+            <div class="col-12 mt-2"><button type="submit" class="btn btn-primary btn-sm">Save ZAR Budget</button></div>
+          </form>
+        </div>
+      </div>
+      <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0">
+            <thead class="table-light"><tr><th>Event</th><th>SME</th><th>Subtotal (R)</th><th>Contingency (R)</th><th>Est. Total (R)</th><th>Actual (R)</th><th>Approval</th><th>Action</th></tr></thead>
+            <tbody>
+              {% for b in budgets %}
+              <tr>
+                <td class="fw-semibold">{{ b.event.name }}</td>
+                <td>{{ b.sme.trading_name|default:"Cohort" }}</td>
+                <td>R {{ b.subtotal|floatformat:2 }}</td>
+                <td>R {{ b.contingency_value|floatformat:2 }}</td>
+                <td class="fw-bold">R {{ b.estimated_total|floatformat:2 }}</td>
+                <td>{% if b.actual_spend %}R {{ b.actual_spend|floatformat:2 }}{% else %}-{% endif %}</td>
+                <td>
+                  <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_budget_status">
+                    <input type="hidden" name="record_id" value="{{ b.id }}">
+                    <select name="approval_status" class="form-select form-select-sm" onchange="this.form.submit()">
+                      {% for st in budget_status_choices %}<option value="{{ st }}" {% if b.approval_status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+                    </select>
+                  </form>
+                </td>
+                <td>
+                  <form method="post" onsubmit="return confirm('Delete this budget entry?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete_record">
+                    <input type="hidden" name="model_type" value="budget">
+                    <input type="hidden" name="record_id" value="{{ b.id }}">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="8" class="text-center text-muted py-3">No budgets entered yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 7: Participation & Sales Log -->
+    <div class="tab-pane fade {% if active_tab == 'logs' %}show active{% endif %}" id="tab-logs">
+      <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white fw-bold">Log Post-Event Leads & Sales Outcomes</div>
+        <div class="card-body">
+          <form method="post" class="row g-2">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_log">
+            <div class="col-md-3"><label class="form-label small mb-1">SME</label>{{ log_form.sme }}</div>
+            <div class="col-md-4"><label class="form-label small mb-1">Event / Activity Name</label>{{ log_form.event_name }}</div>
+            <div class="col-md-2"><label class="form-label small mb-1">Event Date</label>{{ log_form.event_date }}</div>
+            <div class="col-md-3"><label class="form-label small mb-1">Participation Type</label>{{ log_form.participation_type }}</div>
+            <div class="col-4 col-md-2"><label class="form-label small mb-1">Leads Captured</label>{{ log_form.leads_captured }}</div>
+            <div class="col-4 col-md-2"><label class="form-label small mb-1">Buyer Leads</label>{{ log_form.qualified_buyer_leads }}</div>
+            <div class="col-4 col-md-2"><label class="form-label small mb-1">Buyer Meetings</label>{{ log_form.buyer_meetings }}</div>
+            <div class="col-4 col-md-2"><label class="form-label small mb-1">Investor Meetings</label>{{ log_form.investor_meetings }}</div>
+            <div class="col-4 col-md-2"><label class="form-label small mb-1">Potential Sales (R)</label>{{ log_form.potential_sales_zar }}</div>
+            <div class="col-4 col-md-2"><label class="form-label small mb-1">Confirmed Sales (R)</label>{{ log_form.confirmed_sales_zar }}</div>
+            <div class="col-md-3"><label class="form-label small mb-1">Follow-up Status</label>{{ log_form.follow_up_status }}</div>
+            <div class="col-md-9"><label class="form-label small mb-1">Outcome / Next Action</label>{{ log_form.outcome_next_action }}</div>
+            <div class="col-12 mt-2"><button type="submit" class="btn btn-success btn-sm">Log Event Impact</button></div>
+          </form>
+        </div>
+      </div>
+      <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0">
+            <thead class="table-light"><tr><th>Date</th><th>SME</th><th>Event</th><th>Buyer Leads</th><th>Potential (R)</th><th>Confirmed (R)</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+              {% for l in logs %}
+              <tr>
+                <td>{{ l.event_date|date:"Y-m-d"|default:"-" }}</td>
+                <td class="fw-semibold">{{ l.sme.trading_name }}</td>
+                <td>{{ l.event_name }}</td>
+                <td>{{ l.qualified_buyer_leads }}</td>
+                <td>R {{ l.potential_sales_zar|floatformat:2 }}</td>
+                <td class="fw-bold text-success">R {{ l.confirmed_sales_zar|floatformat:2 }}</td>
+                <td>{{ l.follow_up_status }}</td>
+                <td>
+                  <form method="post" onsubmit="return confirm('Delete this participation log?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete_record">
+                    <input type="hidden" name="model_type" value="log">
+                    <input type="hidden" name="record_id" value="{{ l.id }}">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="8" class="text-center text-muted py-3">No participation outcomes logged yet.</td></tr>
+              {% endfor %}
+            </tbody>
+            {% if logs %}
+            <tfoot class="table-light fw-bold">
+              <tr><td colspan="3">TOTALS</td><td>{{ buyer_leads }}</td><td>R {{ potential_sales|floatformat:2 }}</td><td class="text-success">R {{ confirmed_sales|floatformat:2 }}</td><td colspan="2"></td></tr>
+            </tfoot>
+            {% endif %}
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 8: 12-Month Plan, Milestones & Risks -->
+    <div class="tab-pane fade {% if active_tab == 'plan' %}show active{% endif %}" id="tab-plan">
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white fw-bold">12-Month Delivery Plan (Jan–Dec 2027)</div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light"><tr><th>Month</th><th>Primary Objective</th><th>External Anchors</th><th>Internal Activity</th><th>Lead Owner</th></tr></thead>
+            <tbody>
+              {% for m in monthly_plans %}
+              <tr>
+                <td class="fw-semibold">{{ m.month }}</td>
+                <td><small>{{ m.primary_objective }}</small></td>
+                <td><small>{{ m.external_event_anchors }}</small></td>
+                <td><small>{{ m.proposed_internal_activity }}</small></td>
+                <td><small>{{ m.lead_owner }}</small></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <span class="fw-bold">Master Calendar Milestones ({{ milestones|length }})</span>
+          <input type="text" class="form-control form-control-sm w-auto" placeholder="Filter milestones..." onkeyup="simpleFilter(this, 'milestonesTable')">
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" id="milestonesTable">
+            <thead class="table-light"><tr><th>Start Date</th><th>Activity / Milestone</th><th>Owner</th><th>Action Required</th><th>Status</th></tr></thead>
+            <tbody>
+              {% for ms in milestones %}
+              <tr>
+                <td class="text-nowrap">{{ ms.start_date|date:"Y-m-d"|default:"TBC" }}</td>
+                <td class="fw-semibold">{{ ms.activity }}</td>
+                <td><small>{{ ms.owner }}</small></td>
+                <td><small>{{ ms.action_required }}</small></td>
+                <td>
+                  <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_milestone_status">
+                    <input type="hidden" name="record_id" value="{{ ms.id }}">
+                    <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                      {% for st in milestone_status_choices %}<option value="{{ st }}" {% if ms.status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+                    </select>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-white fw-bold">Programme Risks & Controls ({{ risks|length }})</div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light"><tr><th>Risk / Assumption</th><th>Priority</th><th>Mitigation</th><th>Owner</th><th>Status</th></tr></thead>
+            <tbody>
+              {% for r in risks %}
+              <tr>
+                <td><small>{{ r.risk_description }}</small></td>
+                <td><span class="badge bg-warning text-dark">{{ r.priority }}</span></td>
+                <td><small>{{ r.mitigation }}</small></td>
+                <td><small>{{ r.owner }}</small></td>
+                <td>
+                  <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_risk_status">
+                    <input type="hidden" name="record_id" value="{{ r.id }}">
+                    <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                      {% for st in risk_status_choices %}<option value="{{ st }}" {% if r.status == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+                    </select>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{{ chart_data|json_script:"chart-data" }}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+function simpleFilter(input, tableId) {
+  const q = input.value.toLowerCase();
+  const rows = document.getElementById(tableId).getElementsByTagName("tbody")[0].rows;
+  for (let row of rows) {
+    row.style.display = row.innerText.toLowerCase().includes(q) ? "" : "none";
+  }
+}
+
+function filterEvents() {
+  const q = document.getElementById("evSearch").value.toLowerCase();
+  const city = document.getElementById("evCity").value;
+  const prio = document.getElementById("evPriority").value;
+  const month = document.getElementById("evMonth").value;
+  const rows = document.getElementById("eventsTable").getElementsByTagName("tbody")[0].rows;
+  let visible = 0;
+
+  for (let row of rows) {
+    const matchText = !q || row.innerText.toLowerCase().includes(q);
+    const matchCity = !city || row.dataset.city === city;
+    const matchPrio = !prio || row.dataset.priority === prio;
+    const matchMonth = !month || (row.dataset.date && row.dataset.date.includes(month));
+    const show = matchText && matchCity && matchPrio && matchMonth;
+    row.style.display = show ? "" : "none";
+    if (show) visible++;
+  }
+  document.getElementById("evCountBadge").innerText = `Showing ${visible} of ${rows.length}`;
+}
+
+function resetEventFilters() {
+  document.getElementById("evSearch").value = "";
+  document.getElementById("evCity").value = "";
+  document.getElementById("evPriority").value = "";
+  document.getElementById("evMonth").value = "";
+  filterEvents();
+}
+
+function filterStakeholders() {
+  const q = document.getElementById("stSearch").value.toLowerCase();
+  const cat = document.getElementById("stCategory").value;
+  const prio = document.getElementById("stPriority").value;
+  const status = document.getElementById("stStatus").value;
+  const rows = document.getElementById("stakeholdersTable").getElementsByTagName("tbody")[0].rows;
+  let visible = 0;
+
+  for (let row of rows) {
+    const matchText = !q || row.innerText.toLowerCase().includes(q);
+    const matchCat = !cat || row.dataset.category === cat;
+    const matchPrio = !prio || row.dataset.priority === prio;
+    const matchStatus = !status || row.dataset.status === status;
+    const show = matchText && matchCat && matchPrio && matchStatus;
+    row.style.display = show ? "" : "none";
+    if (show) visible++;
+  }
+  document.getElementById("stCountBadge").innerText = `${visible}/${rows.length}`;
+}
+
+function resetStakeholderFilters() {
+  document.getElementById("stSearch").value = "";
+  document.getElementById("stCategory").value = "";
+  document.getElementById("stPriority").value = "";
+  document.getElementById("stStatus").value = "";
+  filterStakeholders();
+}
+
+function sortTable(tableId, colIndex) {
+  const table = document.getElementById(tableId);
+  const tbody = table.tBodies[0];
+  const rows = Array.from(tbody.rows);
+  const asc = table.dataset.sortDir !== "asc";
+  table.dataset.sortDir = asc ? "asc" : "desc";
+
+  rows.sort((a, b) => {
+    const aText = a.cells[colIndex].innerText.trim().toLowerCase();
+    const bText = b.cells[colIndex].innerText.trim().toLowerCase();
+    return asc ? aText.localeCompare(bText) : bText.localeCompare(aText);
+  });
+  rows.forEach(r => tbody.appendChild(r));
+}
+
+const scoreFields = ['sector_fit', 'commercial_readiness', 'compliance', 'delivery_capacity', 'pitch_demo', 'strategic_alignment'];
+scoreFields.forEach(name => {
+  const el = document.querySelector(`#scorecardForm [name="${name}"]`);
+  if (el) el.addEventListener('input', updateLiveScore);
+});
+
+function updateLiveScore() {
+  let total = 0;
+  scoreFields.forEach(name => {
+    const val = parseInt(document.querySelector(`#scorecardForm [name="${name}"]`)?.value || 0, 10);
+    if (!isNaN(val)) total += val;
+  });
+  const badge = document.getElementById('liveScorePreview');
+  let rec = 'Hold / Build Readiness';
+  badge.className = 'badge fs-6 bg-warning text-dark';
+  if (total >= 75) {
+    rec = 'Exhibit / Pitch';
+    badge.className = 'badge fs-6 bg-success';
+  } else if (total >= 60) {
+    rec = 'Attend / Network';
+    badge.className = 'badge fs-6 bg-primary';
+  }
+  badge.innerText = `Live Total: ${total} / 100 — ${rec}`;
+}
+
+const costFields = ['registration_stand_fee', 'transport', 'accommodation', 'freight_samples', 'display_av', 'marketing_printing', 'other_cost'];
+[...costFields, 'contingency_pct'].forEach(name => {
+  const el = document.querySelector(`#budgetForm [name="${name}"]`);
+  if (el) el.addEventListener('input', updateLiveBudget);
+});
+
+function updateLiveBudget() {
+  let subtotal = 0;
+  costFields.forEach(name => {
+    const val = parseFloat(document.querySelector(`#budgetForm [name="${name}"]`)?.value || 0);
+    if (!isNaN(val)) subtotal += val;
+  });
+  const pct = parseFloat(document.querySelector(`#budgetForm [name="contingency_pct"]`)?.value || 0);
+  const cont = subtotal * (isNaN(pct) ? 0 : pct / 100);
+  const total = subtotal + cont;
+  document.getElementById('liveBudgetPreview').innerText =
+    `Subtotal: R ${subtotal.toFixed(2)} | Contingency: R ${cont.toFixed(2)} | Est. Total: R ${total.toFixed(2)}`;
+}
+
+const chartData = JSON.parse(document.getElementById('chart-data').textContent);
+
+new Chart(document.getElementById('stakeholderChart'), {
+  type: 'doughnut',
+  data: {
+    labels: chartData.stakeholder_labels,
+    datasets: [{
+      data: chartData.stakeholder_values,
+      backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#0dcaf0', '#6f42c1', '#fd7e14', '#6c757d']
+    }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+});
+
+new Chart(document.getElementById('smeFinanceChart'), {
+  type: 'bar',
+  data: {
+    labels: chartData.sme_names,
+    datasets: [
+      { label: 'Est. Budget (ZAR)', data: chartData.sme_budgets, backgroundColor: '#0d6efd' },
+      { label: 'Potential Sales (ZAR)', data: chartData.sme_potential_sales, backgroundColor: '#ffc107' },
+      { label: 'Confirmed Sales (ZAR)', data: chartData.sme_confirmed_sales, backgroundColor: '#198754' }
+    ]
+  },
+  options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+});
+</script>
+</body>
+</html>
